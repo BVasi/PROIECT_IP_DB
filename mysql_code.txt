@@ -1,0 +1,211 @@
+CREATE TABLE user (
+  id INT AUTO_INCREMENT PRIMARY KEY NOT NULL,
+  nume VARCHAR(255) NOT NULL,
+  prenume VARCHAR(255) NOT NULL,
+  CNP CHAR(13) NOT NULL UNIQUE,
+  varsta INT NOT NULL,
+  strada VARCHAR(255) NOT NULL,
+  oras VARCHAR(255) NOT NULL,
+  judet VARCHAR(255) NOT NULL,
+  tara VARCHAR(255) NOT NULL,
+  numar_telefon CHAR(10) NOT NULL UNIQUE,
+  adresa_email VARCHAR(255) NOT NULL UNIQUE,
+  profesie VARCHAR(255) NOT NULL,
+  loc_munca VARCHAR(255) NOT NULL,
+  parola VARCHAR(64) NOT NULL,
+  tip_acces ENUM('medic', 'ingrijitor', 'supraveghetor', 'pacient', 'admin') NOT NULL
+);
+
+CREATE TABLE pacient(
+  id INT AUTO_INCREMENT PRIMARY KEY NOT NULL,
+  id_user INT NOT NULL,
+  FOREIGN KEY (id_user) REFERENCES user(id)
+);
+
+CREATE TABLE fisa_medicala (
+  id INT AUTO_INCREMENT PRIMARY KEY NOT NULL,
+  id_pacient INT NOT NULL,
+  FOREIGN KEY (id_pacient) REFERENCES pacient(id)
+);
+
+CREATE TABLE consultatie (
+  id INT AUTO_INCREMENT PRIMARY KEY NOT NULL,
+  id_fisa_medicala INT NOT NULL,
+  data TIMESTAMP,
+  diagnostic TEXT NOT NULL,
+  tratament TEXT NOT NULL,
+  recomandare TEXT,
+  FOREIGN KEY (id_fisa_medicala) REFERENCES fisa_medicala(id)
+);
+
+CREATE TABLE alergie (
+  id INT AUTO_INCREMENT PRIMARY KEY NOT NULL,
+  nume_alergie VARCHAR(255) NOT NULL UNIQUE
+);
+
+CREATE TABLE pacient_alergie (
+  id_pacient INT NOT NULL,
+  id_alergie INT NOT NULL,
+  FOREIGN KEY (id_pacient) REFERENCES pacient(id),
+  FOREIGN KEY (id_alergie) REFERENCES alergie(id)
+);
+
+CREATE TABLE personal (
+  id INT AUTO_INCREMENT PRIMARY KEY NOT NULL,
+  id_user INT NOT NULL,
+  FOREIGN KEY (id_user) REFERENCES user(id)
+);
+
+CREATE TABLE pacient_personal (
+  id_personal INT NOT NULL,
+  id_pacient INT NOT NULL,
+  FOREIGN KEY (id_personal) REFERENCES personal(id),
+  FOREIGN KEY (id_pacient) REFERENCES pacient(id)
+);
+
+CREATE TABLE administrator (
+  id_user INT NOT NULL,
+  FOREIGN KEY (id_user) REFERENCES user(id)
+);
+
+CREATE TABLE inregistrare_senzor (
+  id INT AUTO_INCREMENT PRIMARY KEY NOT NULL,
+  id_pacient INT NOT NULL,
+  data DATE NOT NULL,
+  tensiune_arteriala INT,
+  puls INT,
+  temperatura_corporala FLOAT,
+  greutate FLOAT,
+  glicemie INT,
+  lumina BOOL,
+  temperatura_ambientala INT,
+  prezenta_gaz BOOL,
+  umiditate BOOL,
+  proximitate BOOL,
+  FOREIGN KEY (id_pacient) REFERENCES pacient(id)
+);
+
+CREATE TABLE referinta_senzor (
+  id INT AUTO_INCREMENT PRIMARY KEY NOT NULL,
+  id_pacient INT NOT NULL,
+  minim_tensiune_arteriala INT NOT NULL,
+  maxim_tensiune_arteriala INT NOT NULL,
+  minim_puls INT NOT NULL,
+  maxim_puls INT NOT NULL,
+  minim_temperatura_corporala INT NOT NULL,
+  maxim_temperatura_corporala INT NOT NULL,
+  minim_greutate INT NOT NULL,
+  maxim_greutate INT NOT NULL,
+  minim_glicemie INT NOT NULL,
+  maxim_glicemie INT NOT NULL,
+  minim_temperatura_ambientala INT NOT NULL,
+  maxim_temperatura_ambientala INT NOT NULL,
+  FOREIGN KEY (id_pacient) REFERENCES pacient(id)
+);
+
+CREATE TABLE alarma (
+  id INT AUTO_INCREMENT PRIMARY KEY NOT NULL,
+  id_pacient INT NOT NULL,
+  e_rezolvata BOOL NOT NULL,
+  text_aditional TEXT NOT NULL,
+  tip_alarma ENUM('gaz', 'cresterea_temperaturii', 'parametrii_fiziologici_anormali', 'inundatie', 'sistem_cazut') NOT NULL,
+  FOREIGN KEY (id_pacient) REFERENCES pacient(id)
+);
+
+CREATE TABLE setari_senzori (
+  id INT AUTO_INCREMENT PRIMARY KEY NOT NULL,
+  id_pacient INT NOT NULL,
+  perioada_esantionare ENUM('half_minute', 'one_minute', 'three_minutes', 'five_minutes', 'ten_minutes') NOT NULL,
+  FOREIGN KEY (id_pacient) REFERENCES pacient(id)
+);
+
+CREATE TABLE conversatie (
+    id INT PRIMARY KEY AUTO_INCREMENT NOT NULL,
+    iduser1 INT NOT NULL,
+    iduser2 INT NOT NULL,
+    UNIQUE (iduser1, iduser2), 
+    FOREIGN KEY (iduser1) REFERENCES user(id),
+    FOREIGN KEY (iduser2) REFERENCES user(id)
+);
+
+CREATE TABLE mesaj (
+    id INT PRIMARY KEY AUTO_INCREMENT NOT NULL,
+    idConversatie INT NOT NULL,
+    idSendingUser INT NOT NULL,
+    continut TEXT NOT NULL,
+    data TIMESTAMP,
+    FOREIGN KEY (idConversatie) REFERENCES Conversatie(id),
+    FOREIGN KEY (idSendingUser) REFERENCES User(id)
+);
+
+DELIMITER //
+CREATE TRIGGER insert_user_trigger AFTER INSERT ON user
+FOR EACH ROW
+BEGIN
+    IF NEW.tip_acces = 'pacient' THEN
+        INSERT INTO pacient (id_user) VALUES (NEW.id);
+    ELSEIF NEW.tip_acces = 'admin' THEN
+        INSERT INTO administrator (id_user) VALUES (NEW.id);
+    ELSE
+        INSERT INTO personal (id_user) VALUES (NEW.id);
+    END IF;
+END;
+//
+DELIMITER ;
+
+DELIMITER //
+CREATE TRIGGER insert_pacient_trigger AFTER INSERT ON pacient
+FOR EACH ROW
+BEGIN
+    INSERT INTO referinta_senzor (id_pacient, minim_tensiune_arteriala, maxim_tensiune_arteriala, minim_puls, maxim_puls, minim_temperatura_corporala, maxim_temperatura_corporala, minim_greutate, maxim_greutate, minim_glicemie, maxim_glicemie, minim_temperatura_ambientala, maxim_temperatura_ambientala)
+    VALUES (NEW.id, 90, 120, 40, 150, 32, 40, 40, 140, 90, 120, 16, 30);
+    INSERT INTO fisa_medicala(id_pacient) VALUES (NEW.id);
+    INSERT INTO setari_senzori (id_pacient, perioada_esantionare)
+    VALUES (NEW.id, 'five_minutes');
+END;
+//
+DELIMITER ;
+
+DELIMITER //
+
+CREATE TRIGGER trigger_before_insert_conversatii
+BEFORE INSERT ON conversatie
+FOR EACH ROW
+BEGIN
+    DECLARE min_id INT;
+    DECLARE max_id INT;
+    
+    SET min_id = LEAST(NEW.iduser1, NEW.iduser2);
+    SET max_id = GREATEST(NEW.iduser1, NEW.iduser2);
+    
+    SET NEW.iduser1 = min_id;
+    SET NEW.iduser2 = max_id;
+END;
+//
+
+DELIMITER ;
+
+
+DELIMITER //
+
+CREATE TRIGGER trg_before_insert_consultatie
+BEFORE INSERT ON consultatie
+FOR EACH ROW
+BEGIN
+    SET NEW.data = CURRENT_TIMESTAMP;
+END;
+//
+
+DELIMITER ;
+
+DELIMITER //
+
+CREATE TRIGGER trg_before_insert_mesaj
+BEFORE INSERT ON mesaj
+FOR EACH ROW
+BEGIN
+    SET NEW.data = CURRENT_TIMESTAMP;
+END;
+//
+
+DELIMITER ;
